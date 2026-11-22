@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>槓桿倍數回測器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* layout: left control rail + right results column; summary tiles first, then curve, equity, rolling, table */
+  --bg:#f4f5f2; --panel:#ffffff; --ink:#1d2321; --muted:#5f6b66; --line:#dde1dc;
+  --accent:#0f6b5c; --accent-soft:#d8ece7; --warn:#b3541e; --bad:#b3261e; --good:#1f7a3a;
+  --c1:#6b7470; --c2:#0f6b5c; --c3:#b3541e; --c4:#3b5bdb; --c5:#8e44ad;
+  --font-body:"Noto Sans TC",system-ui,-apple-system,"Microsoft JhengHei",sans-serif;
+  --font-num:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121614; --panel:#1a201d; --ink:#e6ebe8; --muted:#9aa6a0; --line:#2c3531;
+  --accent:#4fc1a8; --accent-soft:#1d3b34; --warn:#e8935c; --bad:#ef7d74; --good:#6fcf8a;
+  --c1:#a3aea9; --c2:#4fc1a8; --c3:#e8935c; --c4:#8ea7ff; --c5:#c58be0; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#121614; --panel:#1a201d; --ink:#e6ebe8; --muted:#9aa6a0; --line:#2c3531;
+  --accent:#4fc1a8; --accent-soft:#1d3b34; --warn:#e8935c; --bad:#ef7d74; --good:#6fcf8a;
+  --c1:#a3aea9; --c2:#4fc1a8; --c3:#e8935c; --c4:#8ea7ff; --c5:#c58be0; color-scheme:dark;}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.55}
+.wrap{display:grid;grid-template-columns:300px 1fr;gap:20px;padding:20px;max-width:1400px;margin:0 auto}
+@media (max-width:900px){.wrap{grid-template-columns:1fr;padding:16px}}
+h1{font-size:22px;margin:0 0 4px;text-wrap:balance}
+h2{font-size:16px;margin:0 0 10px;text-wrap:balance}
+.sub{color:var(--muted);font-size:13px;margin:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+aside .panel{position:sticky;top:16px;display:flex;flex-direction:column;gap:14px}
+fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+legend{font-weight:700;font-size:13px;color:var(--muted);margin-bottom:6px;letter-spacing:.02em}
+label{font-size:13px;display:flex;flex-direction:column;gap:3px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+input,select{font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);width:100%}
+input[type=number]{font-family:var(--font-num)}
+input:focus,select:focus,button:focus{outline:2px solid var(--accent);outline-offset:1px}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{flex:1;font:inherit;font-size:13px;padding:7px 4px;border:0;background:transparent;color:var(--ink);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#fff;font-weight:700}
+.chk{flex-direction:row;align-items:center;gap:6px}
+.chk input{width:auto}
+.hint{font-size:12px;color:var(--muted);margin:0}
+.btnlink{font:inherit;font-size:12px;background:none;border:1px solid var(--line);border-radius:6px;padding:4px 8px;color:var(--accent);cursor:pointer}
+main{display:flex;flex-direction:column;gap:20px;min-width:0}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.tile .k{font-size:12px;color:var(--muted)}
+.tile .v{font-family:var(--font-num);font-size:24px;font-weight:500;font-variant-numeric:tabular-nums}
+.tile .d{font-size:12px;color:var(--muted)}
+.tile.hl{border-color:var(--accent);background:var(--accent-soft)}
+.verdict{font-size:14px;padding:10px 14px;border-left:4px solid var(--accent);background:var(--panel);border-radius:6px}
+.chartbox{position:relative;height:330px}
+.chartbox.tall{height:380px}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+td{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+tr.best td{background:var(--accent-soft);font-weight:500}
+tr.two td:first-child{font-weight:700}
+.neg{color:var(--bad)}
+.pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;background:var(--accent-soft);color:var(--accent);font-family:var(--font-body);margin-left:6px}
+.stats{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:13px;margin-bottom:8px}
+.stats b{font-family:var(--font-num);font-weight:500}
+.notes{font-size:12.5px;color:var(--muted)}
+.notes li{margin-bottom:4px}
+.loading{padding:40px;text-align:center;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<aside>
+  <div class="panel">
+    <div>
+      <h1>槓桿倍數回測器</h1>
+      <p class="sub">每日資料，比較 1 倍到 N 倍固定槓桿的長期結果</p>
+    </div>
+    <fieldset>
+      <legend>市場</legend>
+      <div class="seg" id="mkt" role="group" aria-label="市場">
+        <button data-m="TW" aria-pressed="true">台股</button>
+        <button data-m="NDX" aria-pressed="false">NASDAQ-100</button>
+        <button data-m="SPX" aria-pressed="false">S&amp;P 500</button>
+      </div>
+      <p class="hint" id="mktHint"></p>
+    </fieldset>
+    <fieldset>
+      <legend>期間</legend>
+      <div class="row">
+        <label for="start">起日<input type="date" id="start"></label>
+        <label for="end">迄日<input type="date" id="end"></label>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="presets">
+        <button class="btnlink" data-p="2018">2018 至今</button>
+        <button class="btnlink" data-p="2022">2022 至今</button>
+        <button class="btnlink" data-p="10y">近 10 年</button>
+        <button class="btnlink" data-p="all">全部</button>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>槓桿範圍</legend>
+      <div class="row3">
+        <label for="lmin">最低<input type="number" id="lmin" value="1" step="0.1" min="0" max="5"></label>
+        <label for="lmax">最高<input type="number" id="lmax" value="3" step="0.1" min="0.5" max="6"></label>
+        <label for="lstep">間隔<input type="number" id="lstep" value="0.1" step="0.05" min="0.05" max="1"></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>槓桿成本（每多 1 倍，年化）</legend>
+      <label class="chk" id="irxWrap" for="useIrx"><input type="checkbox" id="useIrx" checked>借款基準利率用每日美國 3 個月國庫券利率</label>
+      <div class="row">
+        <label for="baseRate">固定基準利率 %<input type="number" id="baseRate" value="1.5" step="0.1"></label>
+        <label for="spread">利差＋管理費 %<input type="number" id="spread" value="2.9" step="0.05"></label>
+      </div>
+      <p class="hint" id="costHint"></p>
+    </fieldset>
+    <fieldset>
+      <legend>1 倍標的與股息</legend>
+      <label class="chk" for="useEtf"><input type="checkbox" id="useEtf" checked><span id="etfLbl">有 ETF 資料時用含息 ETF</span></label>
+      <label for="divY">沒有 ETF 資料時，指數加計股息殖利率 %<input type="number" id="divY" value="3.5" step="0.1"></label>
+    </fieldset>
+    <fieldset>
+      <legend>再平衡頻率</legend>
+      <select id="rebal" aria-label="再平衡頻率">
+        <option value="D" selected>每日（槓桿 ETF 的做法）</option>
+        <option value="W">每週</option>
+        <option value="M">每月</option>
+        <option value="Q">每季</option>
+        <option value="Y">每年</option>
+      </select>
+    </fieldset>
+    <fieldset>
+      <legend>滾動視窗分析</legend>
+      <label for="win">視窗長度（年）<input type="number" id="win" value="5" step="1" min="1" max="30"></label>
+    </fieldset>
+    <button class="btnlink" id="reset" style="align-self:flex-start">恢復此市場預設值</button>
+  </div>
+</aside>
+
+<main id="main">
+  <div class="loading" id="loading">載入每日資料中…</div>
+  <div class="tiles" id="tiles" hidden></div>
+  <div class="verdict" id="verdict" hidden></div>
+
+  <section class="panel" hidden id="secCurve">
+    <h2>年化報酬與最大回撤 vs 槓桿倍數</h2>
+    <div class="chartbox"><canvas id="cCurve" aria-label="年化報酬與最大回撤對槓桿倍數的折線圖"></canvas></div>
+  </section>
+
+  <section class="panel" hidden id="secEq">
+    <h2>淨值走勢（對數座標，起始 = 1）</h2>
+    <p class="hint" id="eqHint" style="margin-bottom:8px"></p>
+    <div class="chartbox tall"><canvas id="cEq" aria-label="各槓桿倍數淨值走勢"></canvas></div>
+  </section>
+
+  <section class="panel" hidden id="secRoll">
+    <h2 id="rollTitle">滾動視窗：每段期間事後最佳的槓桿倍數</h2>
+    <div class="stats" id="rollStats"></div>
+    <div class="chartbox"><canvas id="cRoll" aria-label="滾動視窗最佳槓桿分布"></canvas></div>
+  </section>
+
+  <section class="panel" hidden id="secTable">
+    <h2>各倍數明細</h2>
+    <div class="tablewrap"><table id="tbl"></table></div>
+  </section>
+
+  <section class="panel notes" hidden id="secNotes">
+    <h2 style="color:var(--ink)">計算方式</h2>
+    <ul>
+      <li>每天以前一交易日收盤到當日收盤的報酬計算。槓桿部位：當日報酬 = L × 標的報酬 − (L−1) × 借款成本（依實際日曆天數計息）。L &lt; 1 時，多出的現金只賺基準利率。淨值歸零即視為爆倉。</li>
+      <li>1 倍標的：台股用 0050 還原股價（2003/6 起），之前用加權指數加計股息殖利率；NASDAQ-100 用 QQQ 還原股價（1999/3 起），之前用 NDX 指數加計股息；S&amp;P 500 用 SPY 還原股價（1993/1 起），之前用指數加計股息。</li>
+      <li>預設成本是用實際槓桿 ETF 反推的：2018 年至今，QLD、TQQQ 約等於「3 個月國庫券利率 + 每多 1 倍 1.3～1.6%」；00631L 相對於 0050 約為每多 1 倍 4.4%（其中包含期貨與台灣 50 指數的追蹤落差）。</li>
+      <li>沒有計入稅、券商手續費、滑價，也沒有計入融資追繳。實際操作的結果會不同。這是歷史回測，未來不保證有相同結果，也不構成投資建議。</li>
+      <li id="srcNote">資料來源：Yahoo Finance 每日收盤價。</li>
+    </ul>
+  </section>
+</main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const DEF={
+  TW:{name:"台股",useIrx:false,base:1.5,spread:2.9,div:3.5,etf:"0050（含息）",x2:"00631L",x3:null,idx:"加權指數",etfFrom:"2003",hint:"1 倍：0050 含息（之前用加權指數＋股息）。實際產品對照：00631L（2 倍）。"},
+  NDX:{name:"NASDAQ-100",useIrx:true,base:3,spread:1.45,div:0.8,etf:"QQQ（含息）",x2:"QLD",x3:"TQQQ",idx:"NDX",etfFrom:"1999",hint:"1 倍：QQQ 含息（之前用 NDX＋股息）。實際產品對照：QLD（2 倍）、TQQQ（3 倍）。"},
+  SPX:{name:"S&P 500",useIrx:true,base:3,spread:1.45,div:3.0,etf:"SPY（含息）",x2:"SSO",x3:"UPRO",idx:"S&P 500",etfFrom:"1993",hint:"1 倍：SPY 含息（之前用指數＋股息）。實際產品對照：SSO（2 倍）、UPRO（3 倍）。"}
+};
+let DATA=null, M="TW", charts={}, timer=null;
+
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+const pct=(x,d=1)=>x==null||!isFinite(x)?"—":(x*100).toFixed(d)+"%";
+
+function decode(raw){
+  const out={updated:raw.updated};
+  for(const k of ["TW","NDX","SPX"]){
+    const m=raw[k]; const n=m.idx.length; const dates=new Array(n); const t=new Array(n);
+    let ms=Date.parse(m.d0+"T00:00:00Z"); t[0]=ms; dates[0]=m.d0;
+    for(let i=1;i<n;i++){ms+=m.gap[i-1]*864e5;t[i]=ms;dates[i]=new Date(ms).toISOString().slice(0,10);}
+    out[k]={dates,t,idx:m.idx,etf:m.etf,x2:m.x2||null,x3:m.x3||null,rf:m.rf||null};
+  }
+  return out;
+}
+
+function params(){
+  return {start:$("start").value,end:$("end").value,lmin:+$("lmin").value,lmax:+$("lmax").value,lstep:Math.max(0.05,+$("lstep").value||0.1),
+    useIrx:$("useIrx").checked&&!!DATA[M].rf,base:(+$("baseRate").value||0)/100,spread:(+$("spread").value||0)/100,
+    useEtf:$("useEtf").checked,div:(+$("divY").value||0)/100,rebal:$("rebal").value,win:Math.max(1,+$("win").value||5)};
+}
+
+// Build daily return and cost arrays for the selected window
+function prep(p){
+  const D=DATA[M]; const n=D.dates.length;
+  let a=D.dates.findIndex(d=>d>=p.start); if(a<0)a=0;
+  let b=n-1; while(b>0&&D.dates[b]>p.end)b--;
+  if(b-a<20)return null;
+  const N=b-a; const r=new Float64Array(N), cb=new Float64Array(N), cs=new Float64Array(N), key=new Int32Array(N);
+  let lastRf=null;
+  for(let j=0;j<N;j++){
+    const i=a+j+1, h=i-1, days=(D.t[i]-D.t[h])/864e5;
+    if(p.useEtf&&D.etf[i]!=null&&D.etf[h]!=null) r[j]=D.etf[i]/D.etf[h]-1;
+    else r[j]=D.idx[i]/D.idx[h]-1+p.div*days/365;
+    let base=p.base;
+    if(p.useIrx){const v=D.rf[h]; if(v!=null)lastRf=v/100; base=lastRf??p.base;}
+    cb[j]=base*days/365; cs[j]=p.spread*days/365;
+    const dt=new Date(D.t[i]); const y=dt.getUTCFullYear(), mo=dt.getUTCMonth();
+    key[j]= p.rebal==="D"?j : p.rebal==="W"?Math.floor((D.t[i]/864e5+3)/7) : p.rebal==="M"?y*12+mo : p.rebal==="Q"?y*4+Math.floor(mo/3) : y;
+  }
+  return {a,b,N,r,cb,cs,key,dates:D.dates.slice(a,b+1),years:(D.t[b]-D.t[a])/(365.25*864e5)};
+}
+
+// Simulate constant leverage L between indices [s,e) of prepared arrays
+function sim(P,L,s=0,e=P.N,curve=false){
+  let E=1,X=L,debt=L-1,pk=1,mdd=0,dead=false;
+  const eq=curve?new Float64Array(e-s+1):null; if(curve)eq[0]=1;
+  const yr=curve?{}:null; let yStart=1,curY=null;
+  for(let j=s;j<e;j++){
+    if(curve){const y=P.dates[j+1].slice(0,4); if(y!==curY){if(curY!==null)yr[curY]=E/yStart-1; yStart=E||1e-12; curY=y;}}
+    if(!dead){
+      X*=1+P.r[j];
+      debt*= debt>0 ? 1+P.cb[j]+P.cs[j] : 1+P.cb[j];
+      E=X-debt;
+      if(E<=0){E=0;dead=true;}
+      else if(j===e-1||P.key[j+1]!==P.key[j]||P.key.length===0){X=L*E;debt=(L-1)*E;}
+      if(E>pk)pk=E; const dd=pk>0?E/pk-1:-1; if(dd<mdd)mdd=dd;
+    }
+    if(curve)eq[j-s+1]=E;
+  }
+  if(curve&&curY!==null)yr[curY]=E/yStart-1;
+  return {E,mdd:dead?-1:mdd,dead,eq,yr};
+}
+
+function grid(p){const g=[];const n=Math.round((p.lmax-p.lmin)/p.lstep);for(let i=0;i<=n;i++)g.push(+(p.lmin+i*p.lstep).toFixed(3));return g;}
+
+function realProduct(P,key){
+  const D=DATA[M]; const s=D[key]; if(!s)return null;
+  const first=s[P.a]; if(first==null)return null;
+  const arr=[]; for(let i=P.a;i<=P.b;i++)arr.push(s[i]==null?null:s[i]/first);
+  return arr;
+}
+
+function run(){
+  if(!DATA)return;
+  const p=params(); const P=prep(p);
+  if(!P){$("verdict").hidden=false;$("verdict").textContent="這段期間的交易日太少，請把起訖日期拉開一點。";return;}
+  const G=grid(p); if(!G.length)return;
+  const res=G.map(L=>{const s=sim(P,L,0,P.N,true);return{L,...s,cagr:s.E>0?Math.pow(s.E,1/P.years)-1:-1,tot:s.E-1,worst:Math.min(...Object.values(s.yr))};});
+  let best=res[0]; for(const x of res) if(x.E>best.E)best=x;
+  const one=res.find(x=>Math.abs(x.L-1)<1e-9), two=res.find(x=>Math.abs(x.L-2)<1e-9);
+  // Kelly-style estimate
+  let mu=0,c=0; for(let j=0;j<P.N;j++){mu+=P.r[j];c+=P.cb[j]+P.cs[j];} const per=P.N/P.years;
+  const m=mu/P.N; let v=0; for(let j=0;j<P.N;j++)v+=(P.r[j]-m)**2; v/=P.N;
+  const vol=Math.sqrt(v*per), kelly=(m*per-c/P.years)/(v*per);
+  const atEdge=best.L>=G[G.length-1]-1e-9&&G.length>1;
+
+  // tiles
+  const tiles=[
+    {k:"事後最佳倍數",v:best.L.toFixed(2)+"x",d:(atEdge?"已到上限，實際最佳可能更高；":"")+"年化 "+pct(best.cagr),hl:true},
+    {k:"1 倍年化 / 最大回撤",v:one?pct(one.cagr):"—",d:one?"回撤 "+pct(one.mdd,0):"範圍未含 1x"},
+    {k:"2 倍年化 / 最大回撤",v:two?pct(two.cagr):"—",d:two?"回撤 "+pct(two.mdd,0):"範圍未含 2x"},
+    {k:"期間年化波動",v:pct(vol,1),d:P.dates[0]+" → "+P.dates.at(-1)+"，"+P.years.toFixed(1)+" 年"},
+    {k:"理論最佳（報酬−成本）÷波動²",v:kelly.toFixed(2)+"x",d:"用這段期間的實際報酬與波動估算"}
+  ];
+  $("tiles").innerHTML=tiles.map(t=>`<div class="tile${t.hl?" hl":""}"><div class="k">${t.k}</div><div class="v">${t.v}</div><div class="d">${t.d}</div></div>`).join("");
+  let msg=`${DEF[M].name}在 ${P.dates[0]} 到 ${P.dates.at(-1)} 這段期間，年化報酬最高的是 <b>${best.L.toFixed(2)} 倍</b>`;
+  if(two&&best.L!==2) msg+=`；2 倍的年化 ${pct(two.cagr)}，比最佳倍數${two.cagr<best.cagr?"少 "+((best.cagr-two.cagr)*100).toFixed(1)+" 個百分點":"相同"}`;
+  else if(two) msg+=`，剛好就是 2 倍`;
+  msg+="。"; if(best.mdd<-0.6) msg+=` 注意：最佳倍數的最大回撤達 ${pct(best.mdd,0)}。`;
+  $("verdict").innerHTML=msg;
+
+  drawCurve(res,best);
+  drawEq(P,res,best);
+  drawTable(res,best);
+  ["tiles","verdict","secCurve","secEq","secTable","secNotes","secRoll"].forEach(id=>$(id).hidden=false);
+  $("loading").hidden=true;
+  clearTimeout(timer); timer=setTimeout(()=>rolling(P,G,p),30);
+}
+
+function baseOpts(yTitle,extra={}){
+  const ink=css("--ink"),muted=css("--muted"),line=css("--line");
+  return Object.assign({responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},
+    plugins:{legend:{labels:{color:ink,boxWidth:12,font:{family:css("--font-body").split(",")[0].replace(/"/g,"")}}},tooltip:{}},
+    scales:{x:{ticks:{color:muted,maxRotation:0,autoSkipPadding:16},grid:{color:line}},y:{title:{display:!!yTitle,text:yTitle,color:muted},ticks:{color:muted},grid:{color:line}}}},extra);
+}
+function mk(id,cfg){if(charts[id])charts[id].destroy();charts[id]=new Chart($(id),cfg);}
+
+function drawCurve(res,best){
+  const o=baseOpts("年化報酬 %");
+  o.scales.y2={position:"right",title:{display:true,text:"最大回撤 %",color:css("--muted")},ticks:{color:css("--muted")},grid:{drawOnChartArea:false},max:0};
+  o.scales.x.title={display:true,text:"槓桿倍數",color:css("--muted")};
+  o.plugins.tooltip.callbacks={label:c=>c.dataset.label+"："+c.parsed.y.toFixed(1)+"%"};
+  mk("cCurve",{type:"line",data:{labels:res.map(x=>x.L.toFixed(2).replace(/0$/,"")),datasets:[
+    {label:"年化報酬",data:res.map(x=>x.cagr*100),borderColor:css("--c2"),backgroundColor:css("--accent-soft"),fill:"origin",tension:.25,
+     pointRadius:res.map(x=>x===best?6:2),pointBackgroundColor:res.map(x=>x===best?css("--c2"):css("--c2")),yAxisID:"y"},
+    {label:"最大回撤",data:res.map(x=>x.mdd*100),borderColor:css("--bad"),borderDash:[5,4],pointRadius:0,tension:.25,yAxisID:"y2"}
+  ]},options:o});
+}
+
+function drawEq(P,res,best){
+  const pick=[]; const add=(L,col,lbl)=>{const x=res.find(r=>Math.abs(r.L-L)<1e-9)||{eq:sim(P,L,0,P.N,true).eq,L};if(!pick.some(q=>q.L===x.L))pick.push({...x,col,lbl:lbl||x.L+"x 模型"});};
+  add(1,css("--c1")); add(2,css("--c2")); add(3,css("--c3")); add(best.L,css("--c4"),best.L+"x 模型（最佳）");
+  const step=Math.max(1,Math.floor(P.dates.length/700));
+  const idx=[];for(let i=0;i<P.dates.length;i+=step)idx.push(i); if(idx.at(-1)!==P.dates.length-1)idx.push(P.dates.length-1);
+  const ds=pick.map(x=>({label:x.lbl,data:idx.map(i=>x.eq[i]>0?x.eq[i]:null),borderColor:x.col,borderWidth:x.L===best.L?2.5:1.6,pointRadius:0,tension:0}));
+  const notes=[];
+  for(const [k,col,L] of [["x2",css("--c5"),2],["x3",css("--warn"),3]]){
+    const name=DEF[M][k]; if(!name)continue; const arr=realProduct(P,k);
+    if(arr){ds.push({label:name+" 實際",data:idx.map(i=>arr[i]),borderColor:col,borderDash:[4,3],borderWidth:1.6,pointRadius:0});}
+    else if(DATA[M][k]) notes.push(name+" 在起日時還沒上市");
+  }
+  $("eqHint").textContent="實線是模型，虛線是實際槓桿 ETF 的還原淨值，可以用來檢查成本設定是否合理。"+(notes.length?"（"+notes.join("、")+"，未顯示。）":"");
+  const o=baseOpts("淨值（倍）");
+  o.scales.y.type="logarithmic";
+  o.scales.y.ticks.callback=v=>{const s=String(v);return /^(1|2|5)(0*)(\.0*)?$|^0\.(0*)(1|2|5)$/.test(s)?v:"";};
+  o.plugins.tooltip.callbacks={label:c=>c.dataset.label+"："+(c.parsed.y==null?"—":c.parsed.y.toFixed(2))};
+  mk("cEq",{type:"line",data:{labels:idx.map(i=>P.dates[i]),datasets:ds},options:o});
+}
+
+function drawTable(res,best){
+  const h=`<thead><tr><th>槓桿</th><th>總報酬</th><th>年化報酬</th><th>最大回撤</th><th>最差單年</th></tr></thead>`;
+  const rows=res.map(x=>`<tr class="${x===best?"best":""}${Math.abs(x.L-2)<1e-9?" two":""}"><td>${x.L.toFixed(2)}x${x===best?'<span class="pill">最佳</span>':""}${x.dead?'<span class="pill" style="color:var(--bad)">歸零</span>':""}</td>
+    <td>${x.tot>=10?Math.round(x.tot*100).toLocaleString()+"%":pct(x.tot)}</td><td class="${x.cagr<0?"neg":""}">${pct(x.cagr)}</td><td class="neg">${pct(x.mdd,0)}</td><td class="${x.worst<0?"neg":""}">${pct(x.worst,0)}</td></tr>`).join("");
+  $("tbl").innerHTML=h+"<tbody>"+rows+"</tbody>";
+}
+
+function rolling(P,G,p){
+  const per=P.N/P.years, n=Math.round(p.win*per);
+  if(n>=P.N){$("rollStats").innerHTML=`<span>期間不足 ${p.win} 年，無法做滾動分析，請縮短視窗或拉長期間。</span>`;if(charts.cRoll){charts.cRoll.destroy();charts.cRoll=null;}return;}
+  const stepW=Math.max(1,Math.round(per/12)); const bestL=[]; let w2v1=0,w2v3=0,tot=0;
+  const i1=G.findIndex(L=>Math.abs(L-1)<1e-9), i2=G.findIndex(L=>Math.abs(L-2)<1e-9), i3=G.findIndex(L=>Math.abs(L-3)<1e-9);
+  for(let s=0;s+n<=P.N;s+=stepW){
+    let bv=-1,bl=G[0]; const vals=G.map(L=>{const E=sim(P,L,s,s+n).E;if(E>bv){bv=E;bl=L;}return E;});
+    bestL.push(bl); tot++;
+    if(i2>=0&&i1>=0&&vals[i2]>vals[i1])w2v1++; if(i2>=0&&i3>=0&&vals[i2]>vals[i3])w2v3++;
+  }
+  const sorted=[...bestL].sort((x,y)=>x-y), q=f=>sorted[Math.min(sorted.length-1,Math.floor(f*sorted.length))];
+  $("rollTitle").textContent=`滾動 ${p.win} 年視窗：每段期間事後最佳的槓桿倍數（每月往後移一次，共 ${tot} 段）`;
+  let st=`<span>中位數 <b>${q(.5).toFixed(2)}x</b></span><span>25%～75% <b>${q(.25).toFixed(2)}x～${q(.75).toFixed(2)}x</b></span><span>最低／最高 <b>${sorted[0].toFixed(2)}x／${sorted.at(-1).toFixed(2)}x</b></span>`;
+  if(i1>=0&&i2>=0) st+=`<span>2x 勝過 1x：<b>${pct(w2v1/tot,0)}</b></span>`;
+  if(i2>=0&&i3>=0) st+=`<span>2x 勝過 3x：<b>${pct(w2v3/tot,0)}</b></span>`;
+  $("rollStats").innerHTML=st;
+  const counts=G.map(L=>bestL.filter(x=>x===L).length);
+  const o=baseOpts("視窗數");
+  o.scales.x.title={display:true,text:"該視窗的最佳槓桿倍數",color:css("--muted")};
+  o.plugins.legend={display:false};
+  o.plugins.tooltip.callbacks={label:c=>c.parsed.y+" 段（"+pct(c.parsed.y/tot,0)+"）"};
+  mk("cRoll",{type:"bar",data:{labels:G.map(L=>L.toFixed(2).replace(/0$/,"")),datasets:[{data:counts,backgroundColor:G.map(L=>Math.abs(L-2)<1e-9?css("--c3"):css("--c2")),borderRadius:3}]},options:o});
+}
+
+function setMarket(m,keepDates){
+  M=m; const d=DEF[m];
+  document.querySelectorAll("#mkt button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.m===m?"true":"false"));
+  $("mktHint").textContent=d.hint;
+  $("useIrx").checked=d.useIrx; $("irxWrap").style.display=DATA[m].rf?"flex":"none";
+  $("baseRate").value=d.base; $("spread").value=d.spread; $("divY").value=d.div;
+  $("etfLbl").textContent=`有 ETF 資料時用 ${d.etf}（${d.etfFrom} 年起）`;
+  $("costHint").textContent=m==="TW"?"預設合計 4.4%：用 00631L 相對 0050 的實際表現反推。":"預設：國庫券利率＋1.45%，用 QLD、TQQQ 的實際淨值反推。勾選時，固定基準利率不會使用。";
+  const D=DATA[m]; $("start").min=D.dates[0]; $("start").max=D.dates.at(-1); $("end").min=D.dates[0]; $("end").max=D.dates.at(-1);
+  if(!keepDates){ $("start").value=D.dates[0]>"2018-01-01"?D.dates[0]:"2018-01-01"; $("end").value=D.dates.at(-1); }
+  else { if($("start").value<D.dates[0])$("start").value=D.dates[0]; if($("end").value>D.dates.at(-1)||$("end").value<D.dates[0])$("end").value=D.dates.at(-1); }
+  run();
+}
+
+function schedule(){clearTimeout(timer);timer=setTimeout(run,150);}
+
+fetch("data.json").then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}).then(raw=>{
+  DATA=decode(raw);
+  $("srcNote").textContent=`資料來源：Yahoo Finance 每日收盤價，整理於 ${raw.updated}。台股資料至 ${DATA.TW.dates.at(-1)}，美股資料至 ${DATA.NDX.dates.at(-1)}。`;
+  document.querySelectorAll("#mkt button").forEach(b=>b.addEventListener("click",()=>setMarket(b.dataset.m,true)));
+  ["start","end","lmin","lmax","lstep","useIrx","baseRate","spread","useEtf","divY","rebal","win"].forEach(id=>{$(id).addEventListener("input",schedule);$(id).addEventListener("change",schedule);});
+  document.querySelectorAll("#presets button").forEach(b=>b.addEventListener("click",()=>{
+    const D=DATA[M], last=D.dates.at(-1); let s;
+    if(b.dataset.p==="all")s=D.dates[0]; else if(b.dataset.p==="10y")s=(+last.slice(0,4)-10)+last.slice(4); else s=b.dataset.p+"-01-01";
+    $("start").value=s<D.dates[0]?D.dates[0]:s; $("end").value=last; run();}));
+  $("reset").addEventListener("click",()=>setMarket(M,true));
+  setMarket("TW",false);
+}).catch(e=>{$("loading").textContent="資料載入失敗（"+e.message+"），請重新整理頁面。";});
+})();
+</script>
+</body>
+</html>
