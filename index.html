@@ -176,9 +176,10 @@ tr.two td:first-child{font-weight:700}
     <h2 style="color:var(--ink)">計算方式</h2>
     <ul>
       <li>每天以前一交易日收盤到當日收盤的報酬計算。槓桿部位：當日報酬 = L × 標的報酬 − (L−1) × 借款成本（依實際日曆天數計息）。L &lt; 1 時，多出的現金只賺基準利率。淨值歸零即視為爆倉。</li>
-      <li>1 倍標的：台股用 0050 還原股價（2003/6 起），之前用加權指數加計股息殖利率；NASDAQ-100 用 QQQ 還原股價（1999/3 起），之前用 NDX 指數加計股息；S&amp;P 500 用 SPY 還原股價（1993/1 起），之前用指數加計股息。</li>
+      <li>1 倍標的：台股用 0050 還原股價（2010 年起；Yahoo 的 0050 更早資料有缺漏與錯誤，所以不用），之前用加權指數加計股息殖利率；NASDAQ-100 用 QQQ 還原股價（1999/3 起），之前用 NDX 指數加計股息；S&amp;P 500 用 SPY 還原股價（1993/1 起），之前用指數加計股息。</li>
       <li>預設成本是用實際槓桿 ETF 反推的：2018 年至今，QLD、TQQQ 約等於「3 個月國庫券利率 + 每多 1 倍 1.3～1.6%」；00631L 相對於 0050 約為每多 1 倍 4.4%（其中包含期貨與台灣 50 指數的追蹤落差）。</li>
       <li>沒有計入稅、券商手續費、滑價，也沒有計入融資追繳。實際操作的結果會不同。這是歷史回測，未來不保證有相同結果，也不構成投資建議。</li>
+      <li>Yahoo 的部分 ETF 歷史資料有拆分未調整或單日錯價（例如 0050 在 2014/1/2、00631L 在 2015/1/5），這些跳空已用同日指數報酬修正。</li>
       <li id="srcNote">資料來源：Yahoo Finance 每日收盤價。</li>
     </ul>
   </section>
@@ -192,7 +193,7 @@ tr.two td:first-child{font-weight:700}
 "use strict";
 const $=id=>document.getElementById(id);
 const DEF={
-  TW:{name:"台股",useIrx:false,base:1.5,spread:2.9,div:3.5,etf:"0050（含息）",x2:"00631L",x3:null,idx:"加權指數",etfFrom:"2003",hint:"1 倍：0050 含息（之前用加權指數＋股息）。實際產品對照：00631L（2 倍）。"},
+  TW:{name:"台股",useIrx:false,base:1.5,spread:2.9,div:3.5,etf:"0050（含息）",x2:"00631L",x3:null,idx:"加權指數",etfFrom:"2010",hint:"1 倍：0050 含息（之前用加權指數＋股息）。實際產品對照：00631L（2 倍）。"},
   NDX:{name:"NASDAQ-100",useIrx:true,base:3,spread:1.45,div:0.8,etf:"QQQ（含息）",x2:"QLD",x3:"TQQQ",idx:"NDX",etfFrom:"1999",hint:"1 倍：QQQ 含息（之前用 NDX＋股息）。實際產品對照：QLD（2 倍）、TQQQ（3 倍）。"},
   SPX:{name:"S&P 500",useIrx:true,base:3,spread:1.45,div:3.0,etf:"SPY（含息）",x2:"SSO",x3:"UPRO",idx:"S&P 500",etfFrom:"1993",hint:"1 倍：SPY 含息（之前用指數＋股息）。實際產品對照：SSO（2 倍）、UPRO（3 倍）。"}
 };
