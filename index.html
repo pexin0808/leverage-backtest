@@ -320,8 +320,8 @@ function drawCurve(res,best){
   o.plugins.tooltip.callbacks={label:c=>c.dataset.label+"："+c.parsed.y.toFixed(1)+"%"};
   mk("cCurve",{type:"line",data:{labels:res.map(x=>x.L.toFixed(2).replace(/0$/,"")),datasets:[
     {label:"年化報酬",data:res.map(x=>x.cagr*100),borderColor:css("--c2"),backgroundColor:css("--accent-soft"),fill:"origin",tension:.25,
-     pointRadius:res.map(x=>x===best?6:2),pointBackgroundColor:res.map(x=>x===best?css("--c2"):css("--c2")),yAxisID:"y"},
-    {label:"最大回撤",data:res.map(x=>x.mdd*100),borderColor:css("--bad"),borderDash:[5,4],pointRadius:0,tension:.25,yAxisID:"y2"}
+     pointRadius:res.map(x=>x===best?6:2),pointBackgroundColor:css("--c2"),yAxisID:"y",order:2},
+    {label:"最大回撤",data:res.map(x=>x.mdd*100),borderColor:css("--bad"),borderDash:[5,4],borderWidth:2,pointRadius:0,tension:.25,yAxisID:"y2",order:1}
   ]},options:o});
 }
 
