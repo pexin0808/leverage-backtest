@@ -186,6 +186,7 @@ tr.two td:first-child{font-weight:700}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="data.js"></script>
 <script>
 (function(){
 "use strict";
@@ -392,7 +393,7 @@ function setMarket(m,keepDates){
 
 function schedule(){clearTimeout(timer);timer=setTimeout(run,150);}
 
-fetch("data.json").then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}).then(raw=>{
+(window.LEV_DATA?Promise.resolve(window.LEV_DATA):fetch("data.json").then(r=>{if(!r.ok)throw new Error(r.status);return r.json();})).then(raw=>{
   DATA=decode(raw);
   $("srcNote").textContent=`資料來源：Yahoo Finance 每日收盤價，整理於 ${raw.updated}。台股資料至 ${DATA.TW.dates.at(-1)}，美股資料至 ${DATA.NDX.dates.at(-1)}。`;
   document.querySelectorAll("#mkt button").forEach(b=>b.addEventListener("click",()=>setMarket(b.dataset.m,true)));
@@ -403,7 +404,7 @@ fetch("data.json").then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}
     $("start").value=s<D.dates[0]?D.dates[0]:s; $("end").value=last; run();}));
   $("reset").addEventListener("click",()=>setMarket(M,true));
   setMarket("TW",false);
-}).catch(e=>{$("loading").textContent="資料載入失敗（"+e.message+"），請重新整理頁面。";});
+}).catch(e=>{$("loading").textContent="資料載入失敗（"+e.message+"）。請確認 data.js 和這個 HTML 檔放在同一個資料夾，然後重新整理頁面。";});
 })();
 </script>
 </body>
